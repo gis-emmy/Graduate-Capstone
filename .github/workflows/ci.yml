@@ -1,0 +1,224 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # backend
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'backend/package-lock.json'
+    
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        npm install
+    
+    - name: Check Node version
+      run: node --version && npm --version
+    
+    - name: Lint backend code
+      run: |
+        cd backend
+        npm run lint --if-present
+      continue-on-error: true
+    
+    - name: Run backend tests
+      run: |
+        cd backend
+        npm test --if-present
+      continue-on-error: true
+
+  # frontend
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'frontend/package-lock.json'
+    
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm install
+    
+    - name: Check Node version
+      run: node --version && npm --version
+    
+    - name: Lint frontend code
+      run: |
+        cd frontend
+        npm run lint --if-present
+      continue-on-error: true
+    
+    - name: Run frontend tests
+      run: |
+        cd frontend
+        npm test -- --passWithNoTests --watchAll=false
+      continue-on-error: true
+    
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+
+  # check dependencies
+  dependency-check:
+    name: Dependency Security Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Check backend dependencies
+      run: |
+        cd backend
+        npm install
+        npm audit --audit-level=moderate
+      continue-on-error: true
+    
+    - name: Check frontend dependencies
+      run: |
+        cd frontend
+        npm install
+        npm audit --audit-level=moderate
+      continue-on-error: true
+
+  # code quality
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Check backend code style
+      run: |
+        cd backend
+        npm install
+        npm run lint --if-present
+      continue-on-error: true
+    
+    - name: Check frontend code style
+      run: |
+        cd frontend
+        npm install
+        npm run lint --if-present
+      continue-on-error: true
+
+  # build artifacts
+  build-artifacts:
+    name: Build Artifacts
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+    if: success()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Build backend
+      run: |
+        cd backend
+        npm install
+        npm run build --if-present
+      continue-on-error: true
+    
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm install
+        npm run build
+      continue-on-error: true
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: |
+          frontend/build/
+          backend/dist/
+      continue-on-error: true
+
+  # test coverage report
+  coverage:
+    name: Test Coverage Report
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Generate coverage report
+      run: |
+        cd backend
+        npm install
+        npm run test:coverage --if-present
+      continue-on-error: true
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage/lcov.info
+        flags: backend
+        fail_ci_if_error: false
+      continue-on-error: true
+
+  # summary
+  workflow-summary:
+    name: Workflow Summary
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests, dependency-check, code-quality]
+    if: always()
+    
+    steps:
+    - name: Check workflow status
+      run: |
+        echo "  - Backend Tests: ${{ needs.backend-tests.result }}"
+        echo "  - Frontend Tests: ${{ needs.frontend-tests.result }}"
+        echo "  - Dependency Check: ${{ needs.dependency-check.result }}"
+        echo "  - Code Quality: ${{ needs.code-quality.result }}"

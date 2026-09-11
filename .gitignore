@@ -1,6 +1,172 @@
-.dev\*
-*\.dev
+# Node.js Template
+# ========================================
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Production build
+dist/
+build/
+*.tgz
+out/
+
+# Environment variables (CRITICAL - NEVER COMMIT)
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage/
+.nyc_output/
+.coverage
+*.lcov
+
+# Testing
+.mocha
+.jest
+.playwright/
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local Development Scripts (not part of repo)
+start-fullstack.ps1
+.dev/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# OS Files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# AWS (CRITICAL - NEVER COMMIT)
+aws-credentials.txt
+aws-keys.txt
+.aws/
+SAM_CLI_TELEMETRY=0
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+*.temp
+*.backup
+*.bak
+
+# API keys and secrets (NEVER COMMIT)
+secrets.json
+credentials.json
+api-keys.txt
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Cache
+.cache/
+.eslintcache
+.parcel-cache
+.turbo/
+
+# Next.js
+.next/
+
+# React
+.cache
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Vim
+.vim/
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-v][a-z]
+[._]sw[a-p]
+
+# TypeScript
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Project Specific
 .dev
-guides\*
-*\guides
+.dev/*
 guides
+guides/*
+dev-data/
+test-data/
+test-fixtures/
+
+# Husky
+.husky/_
+
+# Backups
+*.old
+*.orig
+
+# ESLint
+.eslintcache
+
+# Stylelint
+.stylelintcache
+
+# Generate by tools
+.gitkeep
+.keep
+
+# ========================================
+# ⚠️  CRITICAL - NEVER COMMIT THESE ⚠️
+# ========================================
+# - .env files with secrets
+# - AWS access keys or credentials
+# - Database passwords
+# - API keys from third parties
+# - Private SSH keys
+# - node_modules/ (rebuild with npm install)
+# - Build outputs (regenerate as needed)
+# - Coverage reports
+# - OS and IDE specific files
+# - Temporary files created during development
