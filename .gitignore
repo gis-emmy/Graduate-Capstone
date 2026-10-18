@@ -139,6 +139,8 @@ guides/*
 dev-data/
 test-data/
 test-fixtures/
+progress_logs/
+progress_logs/*
 
 # Husky
 .husky/_
