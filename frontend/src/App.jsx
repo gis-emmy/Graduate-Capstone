@@ -12,26 +12,24 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
-// Custom marker colors for different project statuses
-const getStatusColor = (status) => {
+// Custom marker colors for different data categories
+const getCategoryColor = (category) => {
   const colors = {
-    'planned': '#FFA500',
-    'under_review': '#FFD700',
-    'under_construction': '#FF6347',
-    'completed': '#32CD32',
-    'archived': '#808080'
+    'biodiversity': '#2E7D32',    // Green
+    'water_quality': '#1976D2',   // Blue
+    'watershed': '#1565C0',       // Dark Blue
   }
-  return colors[status] || '#0078D4'
+  return colors[category] || '#757575'
 }
 
-// Create custom marker icon with color
-const createStatusMarker = (status) => {
-  const color = getStatusColor(status)
+// Create custom marker icon with color for environmental data
+const createCategoryMarker = (category) => {
+  const color = getCategoryColor(category)
   return L.icon({
-    iconUrl: `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDQwIj48cGF0aCBkPSJNMTIgMGM2LjYyNyAwIDEyIDUuMzczIDEyIDEyIDAgNi42MjctMTIgMjgtMTIgMjgtMCAwLTEyLTIxLjM3My0xMi0yOEMwIDUuMzczIDUuMzczIDAgMTIgMHoiIGZpbGw9IiR7Y29sb3J9IiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiLz48L3N2Zz4=`,
-    iconSize: [24, 40],
-    iconAnchor: [12, 40],
-    popupAnchor: [0, -40]
+    iconUrl: `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48Y2lyY2xlIGN4PSI4IiBjeT0iOCIgcj0iNyIgZmlsbD0iJHtjb2xvcn0iIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg==`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+    popupAnchor: [0, -8]
   })
 }
 
@@ -62,6 +60,13 @@ function App() {
   const [showProjects, setShowProjects] = useState(true)
   const [showEnvironmental, setShowEnvironmental] = useState(true)
   const [selectedProject, setSelectedProject] = useState(null)
+  
+  // Individual layer toggles for environmental data categories
+  const [visibleLayers, setVisibleLayers] = useState({
+    biodiversity: true,
+    water_quality: true,
+    watershed: true
+  })
 
   // Center coordinates for Tennessee
   const center = [35.7478, -86.6923]
@@ -134,8 +139,10 @@ function App() {
 
   const fetchEnvironmentalData = async () => {
     try {
+      // Fetch all environmental data without limit restriction
       const response = await environmentalAPI.getAll({
-        limit: 100
+        limit: 5000,
+        offset: 0
       })
 
       if (response.success) {
@@ -189,7 +196,7 @@ function App() {
         <aside className="sidebar">
           {/* Map controls */}
           <div className="sidebar-section">
-            <h3>Map Layers</h3>
+            <h3>Layers</h3>
             <label className="checkbox-label">
               <input 
                 type="checkbox" 
@@ -206,6 +213,34 @@ function App() {
               />
               Show Environmental Data ({environmentalData.length})
             </label>
+            {showEnvironmental && (
+              <div className="data-categories">
+                <label className="checkbox-label" style={{fontSize: '0.9em', marginLeft: '20px'}}>
+                  <input 
+                    type="checkbox"
+                    checked={visibleLayers.biodiversity}
+                    onChange={(e) => setVisibleLayers({...visibleLayers, biodiversity: e.target.checked})}
+                  />
+                  <span style={{color: '#2E7D32'}}>● Biodiversity</span> ({environmentalData.filter(d => d.data_category === 'biodiversity').length})
+                </label>
+                <label className="checkbox-label" style={{fontSize: '0.9em', marginLeft: '20px'}}>
+                  <input 
+                    type="checkbox"
+                    checked={visibleLayers.water_quality}
+                    onChange={(e) => setVisibleLayers({...visibleLayers, water_quality: e.target.checked})}
+                  />
+                  <span style={{color: '#1976D2'}}>● Water Quality</span> ({environmentalData.filter(d => d.data_category === 'water_quality').length})
+                </label>
+                <label className="checkbox-label" style={{fontSize: '0.9em', marginLeft: '20px'}}>
+                  <input 
+                    type="checkbox"
+                    checked={visibleLayers.watershed}
+                    onChange={(e) => setVisibleLayers({...visibleLayers, watershed: e.target.checked})}
+                  />
+                  <span style={{color: '#1565C0'}}>● Watershed</span> ({environmentalData.filter(d => d.data_category === 'watershed').length})
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Filters */}
@@ -341,27 +376,22 @@ function App() {
             {showEnvironmental && (
               <LayerGroup>
                 {environmentalData.map((data, idx) => (
-                  data.location && (
+                  (data.latitude && data.longitude && visibleLayers[data.data_category]) && (
                     <Marker
                       key={`env-${data.env_data_id || idx}`}
                       position={[
-                        typeof data.location === 'object' ? data.location.y || data.location.coordinates?.[1] : 0,
-                        typeof data.location === 'object' ? data.location.x || data.location.coordinates?.[0] : 0
+                        parseFloat(data.latitude),
+                        parseFloat(data.longitude)
                       ]}
-                      icon={L.icon({
-                        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-                        iconSize: [16, 16],
-                        iconAnchor: [8, 8],
-                        popupAnchor: [0, -8]
-                      })}
+                      icon={createCategoryMarker(data.data_category)}
                     >
                       <Popup>
                         <div className="popup-content">
                           <h4>{data.data_category}</h4>
-                          {data.species_name && <p><strong>Species:</strong> {data.species_name}</p>}
-                          {data.protected_status && <p><strong>Status:</strong> {data.protected_status}</p>}
+                          <p><strong>Type:</strong> {data.data_type}</p>
                           <p><strong>Source:</strong> {data.data_source}</p>
-                          <p><strong>Confidence:</strong> {data.data_confidence}</p>
+                          <p><strong>Value:</strong> {data.value} {data.unit}</p>
+                          {data.measurement_date && <p><strong>Measured:</strong> {new Date(data.measurement_date).toLocaleDateString()}</p>}
                         </div>
                       </Popup>
                     </Marker>

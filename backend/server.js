@@ -6,8 +6,13 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { Pool } = require('pg');
 
-// load .env
-dotenv.config();
+// Load .env only if file exists (for local dev)
+// On EB, environment variables are already set in OS
+try {
+  dotenv.config();
+} catch (err) {
+  console.log('No .env file (expected on EB)');
+}
 
 // initialize express
 const app = express();
@@ -16,24 +21,16 @@ const PORT = process.env.PORT || 3001;
 // Initialize PostgreSQL connection pool
 const pool = new Pool({
   user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'dev-password',
+  password: process.env.RDS_PASSWORD || process.env.DB_PASSWORD || 'dev-password',
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'tdot_env'
+  database: process.env.DB_NAME || 'tdot_env',
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 // Handle pool errors
 pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
-});
-
-// Test database connection
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.warn('Database connection warning:', err.message);
-  } else {
-    console.log('✓ Database connected successfully');
-  }
 });
 
 // Database query helper function
@@ -88,12 +85,22 @@ app.get('/api/health', async (req, res) => {
 // define root
 app.get('/', (req, res) => {
   res.status(200).json({
-    message: 'TDOT Project Viewer - Backend API',
+    message: 'TDOT Environmental Data Viewer - Backend API',
     version: '1.0.0',
+    status: 'active',
     endpoints: {
-      health: '/api/health',
-      projects: '/api/projects',
-      environmental: '/api/environmental-data'
+      health: 'GET /api/health',
+      projects: 'GET /api/projects?limit=20&offset=0&county=Knox&status=In Progress',
+      environmental: 'GET /api/environmental-data?limit=50&category=water_quality',
+      waterQuality: 'GET /api/water-quality',
+      biodiversity: 'GET /api/biodiversity',
+      watersheds: 'GET /api/watersheds',
+      dataSummary: 'GET /api/data-summary'
+    },
+    database: {
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'tdot_env'
     }
   });
 });
@@ -176,7 +183,7 @@ app.get('/api/projects', async (req, res) => {
 
 app.get('/api/environmental-data', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 5000);
     const offset = parseInt(req.query.offset) || 0;
     const category = req.query.category;
     const source = req.query.source;
@@ -199,16 +206,15 @@ app.get('/api/environmental-data', async (req, res) => {
     }
 
     // Get total count
-    const countResult = await queryDatabase(`SELECT COUNT(*) FROM Environmental_Data${whereClause}`, params);
+    const countResult = await queryDatabase(`SELECT COUNT(*) FROM environmental_data${whereClause}`, params);
     const total = countResult.success ? countResult.data[0].count : 0;
 
     // Get paginated results
     const sql = `SELECT 
       env_data_id, data_category, data_type, data_source, 
-      species_name, protected_status, habitat_type, measurement_value,
-      measurement_unit, measurement_date, data_confidence, updated_at
-      FROM Environmental_Data${whereClause}
-      ORDER BY updated_at DESC
+      latitude, longitude, value, unit, measurement_date, updated_at
+      FROM environmental_data${whereClause}
+      ORDER BY measurement_date DESC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     
     params.push(limit, offset);
@@ -217,6 +223,7 @@ app.get('/api/environmental-data', async (req, res) => {
     if (result.success) {
       res.status(200).json({
         success: true,
+        count: result.data.length,
         data: result.data,
         pagination: {
           total,
@@ -241,6 +248,130 @@ app.get('/api/environmental-data', async (req, res) => {
   }
 });
 
+// Get water quality data specifically
+app.get('/api/water-quality', async (req, res) => {
+  try {
+    const result = await queryDatabase(
+      `SELECT env_data_id, data_type, latitude, longitude, value, unit, measurement_date, data_source
+       FROM environmental_data 
+       WHERE data_category = 'water_quality' 
+       ORDER BY measurement_date DESC LIMIT 100`
+    );
+    
+    if (result.success) {
+      res.status(200).json({
+        success: true,
+        category: 'water_quality',
+        count: result.data.length,
+        data: result.data
+      });
+    } else {
+      res.status(500).json({ success: false, error: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get biodiversity data
+app.get('/api/biodiversity', async (req, res) => {
+  try {
+    const result = await queryDatabase(
+      `SELECT env_data_id, data_type, latitude, longitude, value, unit, measurement_date, data_source
+       FROM environmental_data 
+       WHERE data_category = 'biodiversity' 
+       ORDER BY measurement_date DESC LIMIT 100`
+    );
+    
+    if (result.success) {
+      res.status(200).json({
+        success: true,
+        category: 'biodiversity',
+        count: result.data.length,
+        data: result.data
+      });
+    } else {
+      res.status(500).json({ success: false, error: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get watersheds
+app.get('/api/watersheds', async (req, res) => {
+  try {
+    const result = await queryDatabase(
+      `SELECT watershed_id, huc12, huc_name, center_lat, center_lon, area_sqkm
+       FROM watersheds 
+       ORDER BY area_sqkm DESC LIMIT 50`
+    );
+    
+    if (result.success) {
+      res.status(200).json({
+        success: true,
+        count: result.data.length,
+        data: result.data
+      });
+    } else {
+      res.status(500).json({ success: false, error: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get data summary (counts by category)
+app.get('/api/data-summary', async (req, res) => {
+  try {
+    const sql = `
+      SELECT 
+        'environmental_data' as type,
+        data_category,
+        COUNT(*) as count,
+        COUNT(DISTINCT data_source) as sources
+      FROM environmental_data
+      GROUP BY data_category
+      UNION ALL
+      SELECT 
+        'watersheds' as type,
+        'watershed' as data_category,
+        COUNT(*) as count,
+        1 as sources
+      FROM watersheds
+      ORDER BY type, data_category
+    `;
+    
+    const result = await queryDatabase(sql);
+    
+    if (result.success) {
+      // Calculate totals
+      let totalRecords = 0;
+      let categories = {};
+      
+      for (const row of result.data) {
+        totalRecords += row.count;
+        if (row.data_category === 'watershed') {
+          categories.watershed = { count: row.count, sources: row.sources };
+        } else {
+          categories[row.data_category] = { count: row.count, sources: row.sources };
+        }
+      }
+      
+      res.status(200).json({
+        success: true,
+        totalRecords,
+        byCategory: categories,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.status(500).json({ success: false, error: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
@@ -259,15 +390,32 @@ app.use((req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`
 
     Backend Server
     Environment: ${(process.env.NODE_ENV || 'development').padEnd(35)}
     Server running on: http://localhost:${PORT}
     Health check: http://localhost:${PORT}/api/health
+    Database: ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}
 
   `);
+});
+
+// Handle startup errors
+server.on('error', (err) => {
+  console.error('Server error:', err);
+  process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled rejection at:', promise, 'reason:', reason);
+  // Don't exit - let the app continue
 });
 
 // Graceful shutdown
